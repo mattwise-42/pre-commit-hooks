@@ -9,14 +9,14 @@ from docs_hooks.cli import main
 ROOT = Path(__file__).parent / "fixtures"
 
 
-@pytest.mark.parametrize(("hook", "language", "extension"), [
-    ("python-docstrings", "python", ".py"),
-    ("java-javadocs", "java", ".java"),
-    ("csharp-xml-docs", "csharp", ".cs"),
+@pytest.mark.parametrize(("hook", "language", "valid", "invalid"), [
+    ("python-docstrings", "python", "valid.py", "invalid.py"),
+    ("java-javadocs", "java", "Valid.java", "Invalid.java"),
+    ("csharp-xml-docs", "csharp", "Valid.cs", "Invalid.cs"),
 ])
-def test_consumer_hook_accepts_documented_and_rejects_undocumented(hook, language, extension, capsys):
-    assert main(hook, [str(ROOT / language / f"Valid{extension}")]) == 0
-    assert main(hook, [str(ROOT / language / f"Invalid{extension}")]) == 1
+def test_consumer_hook_accepts_documented_and_rejects_undocumented(hook, language, valid, invalid, capsys):
+    assert main(hook, [str(ROOT / language / valid)]) == 0
+    assert main(hook, [str(ROOT / language / invalid)]) == 1
     output = capsys.readouterr().err
     assert output
 
