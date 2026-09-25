@@ -1,0 +1,22 @@
+- id: python-docstrings
+  name: Check Python API documentation
+  description: Require Python docstrings, parameter docs, and return/yield docs.
+  entry: python-docstrings
+  language: python
+  types: [python]
+
+- id: java-javadocs
+  name: Check Java API documentation
+  description: Require Javadocs for Java types, methods, and constructors.
+  entry: java-javadocs
+  language: python
+  types: [java]
+  additional_dependencies: [tree-sitter==0.25.2, tree-sitter-java==0.23.5]
+
+- id: csharp-xml-docs
+  name: Check C# API documentation
+  description: Require XML docs for C# types, methods, and constructors.
+  entry: csharp-xml-docs
+  language: python
+  types: [c#]
+  additional_dependencies: [tree-sitter==0.25.2, tree-sitter-c-sharp==0.23.1]
