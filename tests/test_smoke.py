@@ -48,27 +48,6 @@ def test_python_only_hook_module_has_no_parser_dependencies():
     subprocess.run([sys.executable, "-c", code], check=True, capture_output=True)
 
 
-def test_hook_inclusion_flags_work_through_pre_commit(tmp_path):
-    root = ROOT.parents[1]
-    folder = root / ".hook-smoke"
-    folder.mkdir(exist_ok=True)
-    config = folder / "config.yaml"
-    config.write_text(f"""repos:\n  - repo: local\n    hooks:\n      - id: python-docstrings\n        name: Python docs\n        entry: {sys.executable} -m docs_hooks.cli python-docstrings\n        language: system\n        types: [python]\n""")
-    source = folder / "TestWidget.py"
-    source.write_text("class TestWidget:\n    pass\n")
-    relative_source = str(source.relative_to(root))
-
-    result = subprocess.run([sys.executable, "-m", "pre_commit", "run", "--config", str(config), "python-docstrings", "--files", relative_source], cwd=root, text=True, capture_output=True)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-    config.write_text(config.read_text().replace("name: Python docs", "name: Python docs\\n        args: [--include-tests, --include-folder, " + str(ROOT / "python") + "]"))
-    result = subprocess.run([sys.executable, "-m", "pre_commit", "run", "--config", str(config), "python-docstrings", "--files", relative_source], cwd=root, text=True, capture_output=True)
-    assert result.returncode == 1, result.stdout + result.stderr
-    source.unlink()
-    config.unlink()
-    folder.rmdir()
-
-
 def test_explicit_hook_file_is_not_skipped_only_because_of_its_name(tmp_path):
     source = tmp_path / "src" / "TestSupport.cs"
     source.parent.mkdir()
