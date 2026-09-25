@@ -1,13 +1,13 @@
 - id: python-docstrings
   name: Check Python API documentation
-  description: Require Python docstrings, parameter docs, and return/yield docs.
+  description: Require Python documentation; optionally include tests and scan extra folders.
   entry: python-docstrings
   language: python
   types: [python]
 
 - id: java-javadocs
   name: Check Java API documentation
-  description: Require Javadocs for Java types, methods, and constructors.
+  description: Require Java documentation; optionally include tests and scan extra folders.
   entry: java-javadocs
   language: python
   types: [java]
@@ -15,7 +15,7 @@
 
 - id: csharp-xml-docs
   name: Check C# API documentation
-  description: Require XML docs for C# types, methods, and constructors.
+  description: Require C# documentation; optionally include tests and scan extra folders.
   entry: csharp-xml-docs
   language: python
   types: [c#]

@@ -17,14 +17,27 @@ repos:
 Use a published version tag for `rev` and update it deliberately when upgrading. The initial `v0.1.0` example is illustrative until that tag is published; choose an existing release tag for a live consumer.
 All hooks are opt-in; select only the languages used by your project. The
 manifest targets `.py`, `.java`, and `.cs` via pre-commit's language file types.
-In monorepos or projects with test/source-generated code that should not be
-checked, add consumer-side `exclude` regular expressions (for example,
-`^tests/` and `^generated/`) to each relevant hook. Validators do not embed
-repository-specific path rules, so production-only filtering belongs in the
-consumer configuration.
+By default, files discovered under conventional test paths (`test`, `tests`,
+`testing`) and conventionally named test files/classes are skipped. Files passed
+directly to the hook by pre-commit are always checked, including test declarations
+in those files; use repeatable `--include-folder PATH` args to recursively
+scan additional roots; these files are checked alongside files selected by
+pre-commit's filters:
+
+```yaml
+hooks:
+  - id: python-docstrings
+    args: [--include-tests, --include-folder, src, --include-folder, tests]
+```
+
+All hooks still honor pre-commit `files` and `exclude` filters for filenames
+that pre-commit passes to them. Included folders are explicit scan roots; their
+files are not subject to consumer-side file filters. The CLI flags may also be
+set directly in a hook's `args` list.
 
 ## Rules
 
+* Test files are recognized by path components `test`, `tests`, or `testing`, Python-style `test_*.py` / `*_test.py` names, and Java/C# `Test*.java` / `*Test.java` names. Test declarations are recognized by class names prefixed by `Test` or suffixed by `Test`, `Tests`, `TestCase`, or `TestSuite`; test methods by `test`/`Test` prefix. Pass `--include-tests` to disable these exclusions.
 * `python-docstrings` uses only Python's standard-library AST. It requires
   docstrings for classes, functions, and methods; an `Args:` or `Inputs:`
   section documenting every non-`self`/`cls` parameter; and non-empty

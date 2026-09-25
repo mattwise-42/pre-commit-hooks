@@ -18,14 +18,19 @@ def parse(grammar, source):
     return tree, []
 
 
-def declarations(tree, types, members):
+def declarations(tree, types, members, include_tests=False):
     found = []
 
-    def walk(node):
+    def walk(node, in_test_type=False):
         for index, child in enumerate(node.children):
-            if child.type in types or child.type in members:
+            name_node = child.child_by_field_name("name") if child.type in types or child.type in members else None
+            name = name_node.text.decode() if name_node else ""
+            is_test_type = child.type in types and (name.startswith("Test") or name.endswith(("Test", "Tests", "TestCase", "TestSuite")))
+            is_test_member = child.type in members and (name.lower().startswith("test") or name.startswith("Test"))
+            in_test = in_test_type or is_test_type or is_test_member
+            if child.type in types | members and (include_tests or not in_test):
                 found.append((child, _has_adjacent_doc(node.children, index)))
-            walk(child)
+            walk(child, in_test_type or is_test_type or is_test_member)
 
     walk(tree.root_node)
     return found
