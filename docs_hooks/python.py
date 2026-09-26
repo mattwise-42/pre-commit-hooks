@@ -2,10 +2,6 @@ import ast
 import re
 
 
-def _is_test_class(name):
-    return name.startswith("Test") or name.endswith(("Test", "Tests", "TestCase", "TestSuite"))
-
-
 def _section(docstring, name):
     match = re.search(rf"(?ms)^\s*{name}:\s*\n(.*?)(?=^\s*\w+:\s*$|\Z)", docstring)
     return match.group(1) if match else ""
@@ -38,7 +34,7 @@ def _has_yield(node):
     return visit(node)
 
 
-def validate_python(path, source, include_tests=False):
+def validate_python(path, source):
     try:
         tree = ast.parse(source, filename=path)
     except SyntaxError as error:
@@ -90,9 +86,6 @@ def validate_python(path, source, include_tests=False):
 
     def visit(node):
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            is_test_declaration = _is_test_class(node.name) if isinstance(node, ast.ClassDef) else node.name.startswith("test")
-            if is_test_declaration and not include_tests:
-                return
             kind = "class" if isinstance(node, ast.ClassDef) else "function"
             check(node, kind)
             for child in node.body:

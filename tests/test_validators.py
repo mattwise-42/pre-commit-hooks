@@ -67,18 +67,6 @@ def test_python_validator_has_no_test_path_exceptions():
     assert [item.split(": ", 1)[1] for item in test_result] == [item.split(": ", 1)[1] for item in source_result]
 
 
-def test_python_skips_test_classes_unless_included():
-    source = 'class TestWidget:\n    """Test type."""\nclass WidgetTests:\n    pass\n'
-    assert validate_python("src/widgets.py", source) == []
-    assert len(validate_python("src/widgets.py", source, include_tests=True)) == 1
-
-
-def test_python_skips_test_methods_unless_included():
-    source = 'class Helper:\n    """Helper."""\n    def test_helper(self):\n        pass\n'
-    assert validate_python("src/helper.py", source) == []
-    assert validate_python("src/helper.py", source, include_tests=True)
-
-
 def test_java_accepts_adjacent_docs_for_nested_private_declarations():
     source = '''/** Public type. */
 class Outer {
@@ -114,13 +102,6 @@ def test_java_validator_has_no_test_path_exceptions():
     test_result = validate_java("tests/Test.java", source)
     source_result = validate_java("src/Test.java", source)
     assert [item.split(": ", 1)[1] for item in test_result] == [item.split(": ", 1)[1] for item in source_result]
-
-
-def test_java_skips_test_classes_unless_included():
-    source = "/** Test type. */ class TestWidget { void helper() {} }"
-    assert validate_java("src/Widget.java", source) == []
-    assert validate_java("src/Widget.java", source, include_tests=True)
-
 
 
 
@@ -160,8 +141,3 @@ def test_csharp_validator_has_no_test_path_exceptions():
     source_result = validate_csharp("src/Test.cs", source)
     assert [item.split(": ", 1)[1] for item in test_result] == [item.split(": ", 1)[1] for item in source_result]
 
-
-def test_csharp_skips_test_classes_unless_included():
-    source = "class TestWidget { void Helper() {} }"
-    assert validate_csharp("src/Widget.cs", source) == []
-    assert validate_csharp("src/Widget.cs", source, include_tests=True)
