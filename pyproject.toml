@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "api-docs-pre-commit-hooks"
+version = "0.1.0"
+description = "Pre-commit hooks requiring API documentation for Python, Java, and C#"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Matt Wise" }]
+dependencies = []
+
+[project.scripts]
+python-docstrings = "docs_hooks.cli:python_docstrings"
+java-javadocs = "docs_hooks.cli:java_javadocs"
+csharp-xml-docs = "docs_hooks.cli:csharp_xml_docs"
+
+[tool.setuptools.packages.find]
+include = ["docs_hooks*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
