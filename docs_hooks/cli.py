@@ -1,3 +1,4 @@
+import argparse
 import sys
 from pathlib import Path
 
@@ -15,15 +16,27 @@ def main(hook_id, argv=None):
     else:
         print(f"unknown documentation hook: {hook_id}", file=sys.stderr)
         return 2
+    args = argv if argv is not None else sys.argv[1:]
+    require_own_docs = False
+    if hook_id in {"java-javadocs", "csharp-xml-docs"}:
+        parser = argparse.ArgumentParser(prog=hook_id)
+        parser.add_argument("--require-own-docs", action="store_true")
+        parser.add_argument("files", nargs="*")
+        parsed = parser.parse_args(args)
+        args = parsed.files
+        require_own_docs = parsed.require_own_docs
     diagnostics = []
-    for name in argv if argv is not None else sys.argv[1:]:
+    for name in args:
         path = Path(name)
         try:
             source = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as error:
             diagnostics.append(f"{name}: cannot read file: {error}")
             continue
-        diagnostics.extend(validator(name, source))
+        if require_own_docs:
+            diagnostics.extend(validator(name, source, require_own_docs=True))
+        else:
+            diagnostics.extend(validator(name, source))
     for diagnostic in diagnostics:
         print(diagnostic, file=sys.stderr)
     return int(bool(diagnostics))

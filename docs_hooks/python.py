@@ -2,13 +2,68 @@ import ast
 import re
 
 
-def _section(docstring, name):
-    match = re.search(rf"(?ms)^\s*{name}:\s*\n(.*?)(?=^\s*\w+:\s*$|\Z)", docstring)
-    return match.group(1) if match else ""
+_SECTION_HEADINGS = {
+    "Args:",
+    "Arguments:",
+    "Attributes:",
+    "Class Attributes:",
+    "Deprecated:",
+    "Example:",
+    "Examples:",
+    "Inputs:",
+    "Keyword Args:",
+    "Keyword Arguments:",
+    "Methods:",
+    "Module Attributes:",
+    "Note:",
+    "Notes:",
+    "Other Parameters:",
+    "Parameters:",
+    "Properties:",
+    "Raises:",
+    "References:",
+    "Returns:",
+    "See Also:",
+    "Todo:",
+    "Warnings:",
+    "Yields:",
+}
+_INPUT_SECTIONS = ("Args", "Arguments", "Parameters", "Inputs")
+_PARAMETER_LINE = re.compile(
+    r"^\s*(?P<name>\*{0,2}[A-Za-z_]\w*)(?:\s+\([^)]*\))?:\s*(?P<description>\S.*)$"
+)
 
 
-def _nonempty_section(docstring, name):
-    return bool(_section(docstring, name).strip())
+def _section_lines(docstring, heading):
+    lines = docstring.splitlines()
+    start = next((index for index, line in enumerate(lines) if line.strip() == f"{heading}:"), None)
+    if start is None:
+        return None
+
+    section = []
+    for line in lines[start + 1 :]:
+        if line.strip() in _SECTION_HEADINGS:
+            break
+        if line.strip():
+            section.append(line)
+    return section
+
+
+def _documented_parameters(docstring):
+    for heading in _INPUT_SECTIONS:
+        section = _section_lines(docstring, heading)
+        if section is not None:
+            return {
+                match.group("name").lstrip("*")
+                for line in section
+                if (match := _PARAMETER_LINE.match(line))
+            }
+    return None
+
+
+def _has_section_content(docstring, heading):
+    section = _section_lines(docstring, heading)
+    return bool(section)
 
 
 def _returns_value(node):
@@ -34,6 +89,44 @@ def _has_yield(node):
     return visit(node)
 
 
+def _is_static_method(node):
+    for decorator in node.decorator_list:
+        if isinstance(decorator, ast.Call):
+            decorator = decorator.func
+        if isinstance(decorator, ast.Name) and decorator.id == "staticmethod":
+            return True
+        if isinstance(decorator, ast.Attribute) and decorator.attr == "staticmethod":
+            return True
+    return False
+
+
+def _no_output_annotation(annotation):
+    if isinstance(annotation, ast.Name):
+        name = annotation.id
+    elif isinstance(annotation, ast.Attribute):
+        name = annotation.attr
+    elif isinstance(annotation, ast.Constant):
+        if annotation.value is None:
+            return True
+        if isinstance(annotation.value, str):
+            name = annotation.value.rsplit(".", 1)[-1]
+        else:
+            return False
+    else:
+        return False
+    return name in {"None", "NoReturn", "Never"}
+
+
+def _output_section(node):
+    if _has_yield(node):
+        return "Yields"
+    if node.returns is not None and _no_output_annotation(node.returns):
+        return None
+    if node.returns is not None or _returns_value(node):
+        return "Returns"
+    return None
+
+
 def validate_python(path, source):
     try:
         tree = ast.parse(source, filename=path)
@@ -42,57 +135,59 @@ def validate_python(path, source):
 
     diagnostics = []
 
-    def check(node, kind):
+    def check(node, kind, is_method=False):
         doc = ast.get_docstring(node)
         line = node.lineno
         name = node.name
-        if not doc:
+        if not doc or not doc.strip():
             diagnostics.append(f"{path}:{line}: {kind} {name!r} is missing docstring")
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                params = [arg.arg for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs]
-                if node.args.vararg:
-                    params.append(node.args.vararg.arg)
-                if node.args.kwarg:
-                    params.append(node.args.kwarg.arg)
-                missing = [param for param in params if param not in {"self", "cls"}]
-                if missing:
-                    diagnostics.append(f"{path}:{line}: {kind} {name!r} parameters {', '.join(missing)!r} require documentation in an Args: or Inputs: section")
-                if _has_yield(node):
-                    diagnostics.append(f"{path}:{line}: {kind} {name!r} requires a non-empty Yields: section")
-                elif _returns_value(node):
-                    diagnostics.append(f"{path}:{line}: {kind} {name!r} requires a non-empty Returns: section")
             return
-        params = []
+
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             args = node.args
-            params = [arg.arg for arg in args.posonlyargs + args.args + args.kwonlyargs]
+            params = [arg.arg for arg in args.posonlyargs + args.args]
             if args.vararg:
                 params.append(args.vararg.arg)
+            params.extend(arg.arg for arg in args.kwonlyargs)
             if args.kwarg:
                 params.append(args.kwarg.arg)
-        section = _section(doc, "Args") or _section(doc, "Inputs")
-        documented_params = set(re.findall(r"(?m)^\s*([A-Za-z_]\w*)\s*:", section))
-        missing = [param for param in params if param not in {"self", "cls"} and param not in documented_params]
-        if missing and not any(re.search(rf"(?m)^\s*{section}:\s*$", doc) for section in ("Args", "Inputs")):
-            diagnostics.append(f"{path}:{line}: {kind} {name!r} parameters {', '.join(missing)!r} require documentation in an Args: or Inputs: section")
-        else:
-            for param in missing:
-                diagnostics.append(f"{path}:{line}: {kind} {name!r} parameter {param!r} is undocumented in Args: or Inputs:")
-        if _has_yield(node):
-            if not _nonempty_section(doc, "Yields"):
-                diagnostics.append(f"{path}:{line}: {kind} {name!r} requires a non-empty Yields: section")
-        elif _returns_value(node) and not _nonempty_section(doc, "Returns"):
-            diagnostics.append(f"{path}:{line}: {kind} {name!r} requires a non-empty Returns: section")
+            if is_method and not _is_static_method(node) and params and params[0] in {"self", "cls"}:
+                params.pop(0)
 
-    def visit(node):
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            kind = "class" if isinstance(node, ast.ClassDef) else "function"
-            check(node, kind)
+            documented = _documented_parameters(doc)
+            missing = [param for param in params if documented is None or param not in documented]
+            if missing:
+                if documented is None:
+                    headings = ", ".join(f"{heading}:" for heading in _INPUT_SECTIONS)
+                    diagnostics.append(
+                        f"{path}:{line}: {kind} {name!r} parameters {', '.join(missing)!r} "
+                        f"require documentation in one of these input sections: {headings}"
+                    )
+                else:
+                    diagnostics.append(
+                        f"{path}:{line}: {kind} {name!r} parameters {', '.join(missing)!r} "
+                        "are undocumented in the selected input section"
+                    )
+
+            output = _output_section(node)
+            if output and not _has_section_content(doc, output):
+                diagnostics.append(
+                    f"{path}:{line}: {kind} {name!r} requires a non-empty {output}: section"
+                )
+
+    def visit(node, in_class=False):
+        if isinstance(node, ast.ClassDef):
+            check(node, "class")
+            for child in node.body:
+                visit(child, True)
+            return
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            check(node, "function", in_class)
             for child in node.body:
                 visit(child)
             return
         for child in ast.iter_child_nodes(node):
-            visit(child)
+            visit(child, in_class)
 
     visit(tree)
     return diagnostics

@@ -21,6 +21,94 @@ def test_consumer_hook_accepts_documented_and_rejects_undocumented(hook, languag
     assert output
 
 
+@pytest.mark.parametrize(("hook", "suffix", "source"), [
+    ("java-javadocs", ".java", """/** Base type. */
+class Base {
+    /** Base docs. */
+    void run() {}
+}
+/** Child type. */
+class Child extends Base {
+    /** {@inheritDoc} */
+    @Override void run() {}
+}"""),
+    ("csharp-xml-docs", ".cs", """/// <summary>Base type.</summary>
+class Base {
+    /// <summary>Base docs.</summary>
+    public virtual void Run() {}
+}
+/// <summary>Child type.</summary>
+class Child : Base {
+    /// <inheritdoc/>
+    public override void Run() {}
+}"""),
+])
+def test_inherit_docs_are_accepted_by_default(tmp_path, hook, suffix, source):
+    path = tmp_path / f"Child{suffix}"
+    path.write_text(source)
+
+    assert main(hook, [str(path)]) == 0
+
+
+@pytest.mark.parametrize(("hook", "suffix", "source", "method_name", "doc_kind"), [
+    ("java-javadocs", ".java", """/** Base type. */
+class Base {
+    /** Base docs. */
+    void run() {}
+}
+/** Child type. */
+class Child extends Base {
+    /** {@inheritDoc} */
+    @Override void run() {}
+}""", "run", "Javadoc content"),
+    ("csharp-xml-docs", ".cs", """/// <summary>Base type.</summary>
+class Base {
+    /// <summary>Base docs.</summary>
+    public virtual void Run() {}
+}
+/// <summary>Child type.</summary>
+class Child : Base {
+    /// <inheritdoc cref="Base.Run"/>
+    public override void Run() {}
+}""", "Run", "XML documentation content"),
+])
+def test_require_own_docs_rejects_inherit_only_comments(tmp_path, capsys, hook, suffix, source, method_name, doc_kind):
+    path = tmp_path / f"Child{suffix}"
+    path.write_text(source)
+
+    assert main(hook, ["--require-own-docs", str(path)]) == 1
+    assert f"{method_name} uses only inherited docs; own {doc_kind} is required" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("hook", "suffix", "source"), [
+    ("java-javadocs", ".java", """/** Base type. */
+class Base {
+    /** Base docs. */
+    void run() {}
+}
+/** Child type. */
+class Child extends Base {
+    /** Child docs. {@inheritDoc} */
+    @Override void run() {}
+}"""),
+    ("csharp-xml-docs", ".cs", """/// <summary>Base type.</summary>
+class Base {
+    /// <summary>Base docs.</summary>
+    public virtual void Run() {}
+}
+/// <summary>Child type.</summary>
+class Child : Base {
+    /// <summary>Child docs. <inheritdoc/></summary>
+    public override void Run() {}
+}"""),
+])
+def test_require_own_docs_accepts_comments_with_own_text(tmp_path, hook, suffix, source):
+    path = tmp_path / f"Child{suffix}"
+    path.write_text(source)
+
+    assert main(hook, ["--require-own-docs", str(path)]) == 0
+
+
 def test_pre_commit_files_and_exclude_select_source_files_without_args(tmp_path):
     root = tmp_path / "repo"
     source = root / "src" / "app.py"
@@ -47,5 +135,3 @@ def test_pre_commit_files_and_exclude_select_source_files_without_args(tmp_path)
 def test_python_only_hook_module_has_no_parser_dependencies():
     code = "import docs_hooks.cli as cli; cli.python_docstrings(); import sys; assert not any(n.startswith('tree_sitter') for n in sys.modules)"
     subprocess.run([sys.executable, "-c", code], check=True, capture_output=True)
-
-

@@ -24,15 +24,291 @@ class Outer:
     assert validate_python("sample.py", source) == []
 
 
-def test_python_reports_missing_docstrings_parameters_and_returns():
+def test_python_stops_checking_inputs_and_outputs_when_docstring_is_missing():
     source = '''
-def missing(value):
+def missing(value) -> int:
     return value
 '''
     diagnostics = validate_python("sample.py", source)
-    assert any("missing docstring" in item for item in diagnostics)
-    assert any("value" in item and "Args:" in item for item in diagnostics)
+    assert len(diagnostics) == 1
+    assert "missing docstring" in diagnostics[0]
+
+
+def test_python_reports_missing_class_and_method_docstrings():
+    source = '''
+class Example:
+    def run(self):
+        return 1
+'''
+    diagnostics = validate_python("sample.py", source)
+    assert len(diagnostics) == 2
+    assert any("class 'Example' is missing docstring" in item for item in diagnostics)
+    assert any("function 'run' is missing docstring" in item for item in diagnostics)
+
+
+def test_python_reports_missing_parameters_and_annotated_return_documentation():
+    source = '''
+def missing(value, extra) -> int:
+    """Calculate a value.
+
+    Args:
+        value: Input value.
+    """
+    pass
+'''
+    diagnostics = validate_python("sample.py", source)
+    assert any("extra" in item and "undocumented" in item for item in diagnostics)
     assert any("Returns:" in item for item in diagnostics)
+
+
+def test_python_accepts_legacy_input_headings_and_typed_variadic_parameters():
+    source = '''
+def parse(positional, /, value, *args, named, **kwargs):
+    """Parse values.
+
+    Parameters:
+        positional: Positional-only value.
+        value (str): Main value.
+        *args: Additional positional values.
+        named (int): Named value.
+        **kwargs: Additional keyword values.
+    """
+    pass
+'''
+    assert validate_python("sample.py", source) == []
+
+
+def test_python_requires_a_nonempty_description_for_each_parameter():
+    source = '''
+def parse(value):
+    """Parse a value.
+
+    Args:
+        value:
+    """
+    pass
+'''
+    diagnostics = validate_python("sample.py", source)
+    assert any("value" in item and "undocumented" in item for item in diagnostics)
+
+
+def test_python_uses_only_the_first_present_input_section():
+    source = '''
+def parse(first, second):
+    """Parse values.
+
+    Arguments:
+        first: First value.
+
+    Parameters:
+        second: Second value.
+    """
+    pass
+'''
+    diagnostics = validate_python("sample.py", source)
+    assert any("second" in item and "undocumented" in item for item in diagnostics)
+
+
+def test_python_only_omits_first_self_or_cls_parameter_on_nonstatic_methods():
+    source = '''
+def module_function(self, cls):
+    """Module function.
+
+    Args:
+        self: First input.
+        cls: Second input.
+    """
+
+class Example:
+    """Example class."""
+
+    def method(self, value) -> None:
+        """Instance method.
+
+        Args:
+            value: Method input.
+        """
+
+    @classmethod
+    def class_method(cls, value) -> None:
+        """Class method.
+
+        Args:
+            value: Method input.
+        """
+
+    @staticmethod
+    def static_method(self, cls) -> None:
+        """Static method.
+
+        Args:
+            self: First input.
+            cls: Second input.
+        """
+'''
+    assert validate_python("sample.py", source) == []
+
+
+def test_python_requires_self_and_cls_inputs_outside_the_implicit_receiver():
+    source = '''
+def module_function(self, cls):
+    """Module function.
+
+    Args:
+        cls: Second input.
+    """
+
+class Example:
+    """Example class."""
+
+    @staticmethod
+    def static_method(self, cls) -> None:
+        """Static method.
+
+        Args:
+            cls: Second input.
+        """
+
+    def method(cls, self) -> None:
+        """Instance method.
+
+        Args:
+            self: Second input.
+        """
+'''
+    diagnostics = validate_python("sample.py", source)
+    assert len(diagnostics) == 2
+    assert any("module_function" in item and "self" in item for item in diagnostics)
+    assert any("static_method" in item and "self" in item for item in diagnostics)
+
+
+def test_python_treats_whitespace_only_docstrings_as_missing():
+    source = '''
+class Example:
+    """   """
+
+    def run(value) -> int:
+        """
+        """
+'''
+    diagnostics = validate_python("sample.py", source)
+    assert len(diagnostics) == 2
+    assert all("missing docstring" in item for item in diagnostics)
+
+
+def test_python_skips_returns_for_none_and_no_return_annotations():
+    source = '''
+def returns_none() -> None:
+    """Update state."""
+
+def returns_quoted_none() -> "None":
+    """Update state."""
+
+def never_returns() -> typing.NoReturn:
+    """Stop execution."""
+
+def never_returns_by_name() -> NoReturn:
+    """Stop execution."""
+
+def never_returns_with_never() -> Never:
+    """Stop execution."""
+
+def quoted_never_returns() -> "typing_extensions.Never":
+    """Stop execution."""
+
+def quoted_no_return_name() -> "NoReturn":
+    """Stop execution."""
+
+def quoted_never_name() -> "Never":
+    """Stop execution."""
+'''
+    assert validate_python("sample.py", source) == []
+
+
+def test_python_none_annotation_suppresses_returns_even_for_a_return_call():
+    source = '''
+def update() -> None:
+    """Update stored state."""
+    return write_state()
+'''
+    assert validate_python("sample.py", source) == []
+
+
+def test_python_requires_returns_for_unannotated_non_none_return_values():
+    source = '''
+def transform(value):
+    """Transform a value."""
+    return value
+'''
+    assert any("Returns:" in item for item in validate_python("sample.py", source))
+
+
+def test_python_requires_returns_for_annotations_without_return_statements():
+    source = '''
+def annotated() -> int:
+    """Calculate a value."""
+    pass
+
+async def async_annotated() -> str:
+    """Calculate a value asynchronously."""
+    pass
+'''
+    diagnostics = validate_python("sample.py", source)
+    assert sum("Returns:" in item for item in diagnostics) == 2
+
+
+def test_python_return_sections_end_at_known_headings_only():
+    source = '''
+def results() -> dict:
+    """Build results.
+
+    Returns:
+        Result:
+        - count: Number of matches.
+
+    Raises:
+        ValueError: If the source is invalid.
+    """
+    pass
+'''
+    assert validate_python("sample.py", source) == []
+
+
+def test_python_nested_declarations_do_not_supply_outer_outputs():
+    source = '''
+def outer():
+    """Run local helpers."""
+
+    def inner() -> int:
+        """Calculate a value.
+
+        Returns:
+            The helper result.
+        """
+        return 1
+
+    async def async_inner() -> str:
+        """Calculate asynchronously.
+
+        Returns:
+            The helper result.
+        """
+        return "value"
+
+    class Nested:
+        """Nested class."""
+
+        def values(self):
+            """Yield values.
+
+            Yields:
+                Each value.
+            """
+            yield 1
+
+    transform = lambda: 1
+'''
+    assert validate_python("sample.py", source) == []
 
 
 def test_python_checks_declarations_nested_in_control_flow():
@@ -140,4 +416,3 @@ def test_csharp_validator_has_no_test_path_exceptions():
     test_result = validate_csharp("tests/Test.cs", source)
     source_result = validate_csharp("src/Test.cs", source)
     assert [item.split(": ", 1)[1] for item in test_result] == [item.split(": ", 1)[1] for item in source_result]
-

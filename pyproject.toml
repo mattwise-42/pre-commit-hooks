@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "api-docs-pre-commit-hooks"
-version = "0.1.0"
+version = "0.1.1"
 description = "Pre-commit hooks requiring API documentation for Python, Java, and C#"
 readme = "README.md"
 requires-python = ">=3.10"
