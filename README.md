@@ -53,10 +53,14 @@ For example, `files: ^(src|tests)/.*[.]py$` checks both source and tests, while
   for generators. Syntax errors are reported as diagnostics.
 * `java-javadocs` requires an adjacent `/** ... */` comment on types, methods,
   and constructors, including private declarations. Nested declarations are
-  checked. Syntax errors are reported.
+  checked. `{@inheritDoc}`-only comments are accepted by default. Add
+  `args: [--require-own-docs]` to require the declaration's own Javadoc content.
+  Syntax errors are reported.
 * `csharp-xml-docs` requires adjacent `///` comments on types, methods,
   and constructors, including private declarations. Nested declarations are
-  checked. Syntax errors are reported.
+  checked. `<inheritdoc/>`-only comments are accepted by default. Add
+  `args: [--require-own-docs]` to require the declaration's own XML
+  documentation content. Syntax errors are reported.
 
 Java and C# hooks install the pinned Tree-sitter runtime and their own pinned
 language grammar in their isolated pre-commit environments. The Python hook

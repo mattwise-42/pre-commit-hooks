@@ -24,21 +24,25 @@ def declarations(tree, types, members):
     def walk(node):
         for index, child in enumerate(node.children):
             if child.type in types or child.type in members:
-                found.append((child, _has_adjacent_doc(node.children, index)))
+                found.append((child, _adjacent_doc(node.children, index)))
             walk(child)
 
     walk(tree.root_node)
     return found
 
 
-def _has_adjacent_doc(children, index):
+def _adjacent_doc(children, index):
     previous = index - 1
     while previous >= 0 and children[previous].type in {"modifiers", "modifier", "attribute_list"}:
         previous -= 1
     if previous < 0:
-        return False
+        return None
     candidate = children[previous]
     if candidate.type not in {"comment", "block_comment"}:
-        return False
+        return None
     text = candidate.text.decode().lstrip()
-    return text.startswith("///") if candidate.type == "comment" else candidate.type == "block_comment" and text.startswith("/**")
+    if candidate.type == "comment" and text.startswith("///"):
+        return text
+    if candidate.type == "block_comment" and text.startswith("/**"):
+        return text
+    return None
